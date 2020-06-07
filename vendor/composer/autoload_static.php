@@ -636,8 +636,6 @@ class ComposerStaticInit720463a742a23d4d4cc28e60bcbb977f
         'App\\Http\\Middleware\\VerifyCsrfToken' => __DIR__ . '/../..' . '/app/Http/Middleware/VerifyCsrfToken.php',
         'App\\Mail\\SignalReceived' => __DIR__ . '/../..' . '/app/Mail/SignalReceived.php',
         'App\\Modules' => __DIR__ . '/../..' . '/app/Modules.php',
-        'App\\Modules\\CoinMarketCap' => __DIR__ . '/../..' . '/app/Modules/CoinMarketCap.php',
-        'App\\Modules\\MiningHamsterSignals' => __DIR__ . '/../..' . '/app/Modules/MiningHamsterSignals.php',
         'App\\Modules\\Statistics' => __DIR__ . '/../..' . '/app/Modules/Statistics.php',
         'App\\Modules\\Waller' => __DIR__ . '/../..' . '/app/Modules/Waller.php',
         'App\\Order' => __DIR__ . '/../..' . '/app/Order.php',

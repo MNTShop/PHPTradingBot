@@ -33,8 +33,6 @@ return array(
     'App\\Http\\Middleware\\VerifyCsrfToken' => $baseDir . '/app/Http/Middleware/VerifyCsrfToken.php',
     'App\\Mail\\SignalReceived' => $baseDir . '/app/Mail/SignalReceived.php',
     'App\\Modules' => $baseDir . '/app/Modules.php',
-    'App\\Modules\\CoinMarketCap' => $baseDir . '/app/Modules/CoinMarketCap.php',
-    'App\\Modules\\MiningHamsterSignals' => $baseDir . '/app/Modules/MiningHamsterSignals.php',
     'App\\Modules\\Statistics' => $baseDir . '/app/Modules/Statistics.php',
     'App\\Modules\\Waller' => $baseDir . '/app/Modules/Waller.php',
     'App\\Order' => $baseDir . '/app/Order.php',

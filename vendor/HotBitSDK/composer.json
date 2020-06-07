@@ -1,0 +1,33 @@
+{
+    "name": "HotBitSDK",
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=7.0",
+        "ext-curl": "*",
+        "ratchet/pawl": "^0.3.0",
+        "react/socket": "^1.0 || ^0.8 || ^0.7",
+        "ratchet/rfc6455": "^0.2.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "~6",
+        "codacy/coverage": "dev-master"
+    },
+
+    "autoload": {
+        "psr-4": {
+            "HB\\Sdk\\": "src/"
+        }
+    },
+
+    "config": {
+        "optimize-autoloader": true,
+        "minimum-stability": "stable"
+    },
+    "autoload": {
+        "classmap": [
+            "src/HotBitClient",
+            "src/Clients/RESTClient",
+            "src/Clients/WSClient"
+        ]
+    }
+}

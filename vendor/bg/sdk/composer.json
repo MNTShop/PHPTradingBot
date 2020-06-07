@@ -17,7 +17,7 @@
         "psr-4": {
             "Bg\\Sdk\\": "bg/src/"
         }
-    }
+    },
 
     "config": {
         "optimize-autoloader": true,

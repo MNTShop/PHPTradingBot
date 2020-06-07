@@ -44,7 +44,7 @@ class API
     protected $caOverride = false; // /< set this if you donnot wish to use CA bundle auto download feature
     protected $transfered = 0; // /< This stores the amount of bytes transfered
     protected $requestCount = 0; // /< This stores the amount of API requests
-    private $httpDebug = false; // /< If you enable this, curl will output debugging information
+    protected $httpDebug = false; // /< If you enable this, curl will output debugging information
     private $subscriptions = []; // /< View all websocket subscriptions
     private $btc_value = 0.00; // /< value of available assets
     private $btc_total = 0.00;
@@ -449,18 +449,11 @@ class API
      * @return array with error message or array of orderDetails array
      * @throws \Exception
      */
-    public function orders(string $symbol, int $limit = 500, int $fromOrderId = 1, array $params = [])
-    {
-        
-        $parameters = [
-            "symbol" => $symbol,
-            "limit" => $limit,
-        ];
-        if($fromOrderId > 0) $parameters[] = ["orderId" => $fromOrderId];
-        
-        $parameters = array_merge($parameters, $params);
-        
-        return $this->httpRequest("v3/allOrders", "GET", $parameters, true);
+    public function orders(string $symbol, int $limit = 500, int $fromOrderId = -1, array $params = []) {
+	$params["symbol"] = $symbol;
+	$params["limit"] = $limit;
+        if ( $fromOrderId ) $params["orderId"] = $fromOrderId;
+        return $this->httpRequest("v3/allOrders", "GET", $params, true);
     }
 
     /**
@@ -900,7 +893,7 @@ class API
      * @return array containing the response
      * @throws \Exception
      */
-    private function httpRequest(string $url, string $method = "GET", array $params = [], bool $signed = false)
+    protected function httpRequest(string $url, string $method = "GET", array $params = [], bool $signed = false)
     {
         if (function_exists('curl_init') === false) {
             throw new \Exception("Sorry cURL is not installed!");

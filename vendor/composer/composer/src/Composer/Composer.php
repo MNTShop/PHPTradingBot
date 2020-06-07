@@ -45,14 +45,14 @@ class Composer
      * const SOURCE_VERSION = '';
      *
      * source (git clone):
-     * const VERSION = '1.10.6';
+     * const VERSION = '1.10.7';
      * const BRANCH_ALIAS_VERSION = '';
-     * const RELEASE_DATE = '2020-05-06 10:28:10';
+     * const RELEASE_DATE = '2020-06-03 10:03:56';
      * const SOURCE_VERSION = '1.8-dev+source';
      */
-    const VERSION = '1.10.6';
+    const VERSION = '1.10.7';
     const BRANCH_ALIAS_VERSION = '';
-    const RELEASE_DATE = '2020-05-06 10:28:10';
+    const RELEASE_DATE = '2020-06-03 10:03:56';
     const SOURCE_VERSION = '1.10-dev+source';
 
     /**
