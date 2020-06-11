@@ -111,8 +111,8 @@ class Waller extends Command
                 $this->exchangeClient = BithumbTradeHelper::getBithumb();
 
                 $this->waller = Modules::init('Waller');
-//            $pairs = [$this->waller->getConfig('pair')];
-            $pairs = ['BIP-USDT','BIP-BTC'];
+            $pairs = [$this->waller->getConfig('pair')];
+//            $pairs = ['BIP-USDT','BIP-BTC'];
                 foreach ($pairs as $pair ){
                     // set pair settings
                     if($pair == 'BIP-BTC'){
