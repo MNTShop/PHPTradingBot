@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\BithumbTradeHelper;
 use App\Brick;
 use App\Modules;
+use App\Order;
 use App\Price;
 use App\Setting;
 use App\Ticker as TickerModel;
@@ -45,6 +46,37 @@ class Waller extends Command
 
 
     /**
+     * Exchange client.
+     *
+     * @var BithumbGlobalClient
+     */
+    protected $exchangeClient ;
+    /**
+     * Waller Module instance.
+     *
+     * @var Modules
+     */
+    protected $waller ;
+    /**
+     * Amount to buy for order
+     */
+    protected $buyOrderAmount ;
+    /**
+     * spred or distance among orders
+     */
+    protected $spread ;
+
+    /**
+     * green wall covering in %
+     */
+    protected $buyCovering ;
+    /**
+     * red wall covering in %
+     */
+    protected $sellCovering ;
+
+
+    /**
      * Create a new command instance.
      *
      * @return void
@@ -64,14 +96,9 @@ class Waller extends Command
     public function handle()
     {
                     $this->info('Daemon start');
-
+        $this->exchangeClient = BithumbTradeHelper::getBithumb();
         while(true) {
-
             try{
-
-            $bithumb = BithumbTradeHelper::getBithumb();
-            //waller settings
-
             $enabledModules = Modules::getActiveModules();
             $eligibleModules = [];
             if ($enabledModules) {
@@ -82,137 +109,113 @@ class Waller extends Command
                     }
                 }
             }
-//Rest$waller = new Modules\Waller();
-//        $config =
-
-            $waller = Modules::init('Waller');
-//            $this->info(print_r($waller->config, 1));
-//                $waller->setConfig('buyCovering',1);
-//                $sellCovering = $waller->getConfig('sellCovering');
-//                $spread = $waller->getConfig('spread');
-//                $buyOrderAmount = $waller->getConfig('buyOrderAmount');
-//                $pair = $waller->setConfig(['pair'=>'BIP-USDT']);
-
-                $buyCovering = $waller->getConfig('buyCovering');
-            $sellCovering = $waller->getConfig('sellCovering');
-            $spread = (float)$waller->getConfig('spread');
-            $spread = $spread/100;
-
-            $buyOrderAmount = $waller->getConfig('buyOrderAmount');
-            $pairs = [$waller->getConfig('pair')];
+            //init waller and new settings
+            $this->waller = Modules::init('Waller');
+            $pairs = [$this->waller->getConfig('pair')];
 //            $pairs = ['BIP-USDT','BIP-BTC'];
-
                 foreach ($pairs as $pair ){
-
+                    // set pair settings
                     if($pair == 'BIP-BTC'){
-                        $buyOrderAmount =  0.000421600;
-                        $spread = 0.3;
-                        $buyCovering = 1;
-                        $sellCovering = 1;
-                        $countSellWall = $sellCovering / $spread;
-                        $countBuyWall = $buyCovering / $spread;
-                        $spread = $spread/100;
-
+                        $this->buyOrderAmount =  0.000421600;
+                        $this->spread = 0.5;
+                        $this->buyCovering = 2;
+                        $this->sellCovering = 2;
+                        $this->spread = $this->spread/100;
+                    }else{
+                        $this->buyCovering = $this->waller->getConfig('buyCovering');
+                        $this->sellCovering = $this->waller->getConfig('sellCovering');
+                        $this->spread = (float)$this->waller->getConfig('spread');
+                        $this->spread = $this->spread/100;
+                        $this->buyOrderAmount = $this->waller->getConfig('buyOrderAmount');
                     }
+
+                    // from bithumb
                     $symbolConfig = BithumbTradeHelper::getNotions($pair);
-                    $openBithumbOrdersArray = BithumbTradeHelper::getOpenOrdersId($bithumb,$pair);
-                    $openWallerOrdersArray = Brick::getAllBricksOrderId($pair);        //create wall if not exis
-                    $currentPrice = BithumbTradeHelper::getPrice($pair);
+                    $openBithumbOrdersArray = BithumbTradeHelper::getOpenOrdersId($this->exchangeClient,$pair);
+                    $openWallerOrdersArray = Brick::getAllBricksOrderId($pair);
+                    //create wall if not exist in waller memmory
+                    if (empty($openWallerOrdersArray)) {
+                        $this->createWall($pair,'sell');
+                        $this->createWall($pair,'buy');
+                        // go to next pair
+                        continue;
+                    }
+
 
 //            $this->info('openWallerOrders' . print_r($openWallerOrdersArray, 1));
                     //close orders
                     $closedOrders = array_diff($openWallerOrdersArray, $openBithumbOrdersArray);
+//                    sort($closedOrders,SORT_NUMERIC);
 //            $this->info('$closedOrders  ' . print_r($closedOrders, 1));
 
 
-                    if (empty($openWallerOrdersArray)) {
 
-                        $this->createWall($pair,'sell');
-                        $this->createWall($pair,'buy');
-
-                    }
+                    $currentPrice = BithumbTradeHelper::getPrice($pair);
 
                     if (count($closedOrders) > 0) {
-//            protected $fillable = ['side', 'symbol', 'price', 'quantity', 'orderId', 'createTime','tradedNum','type'];
 
                         // recreate walls
                         foreach ($closedOrders as $orderId) {
                             //if closed by user just destroy
-                            if(!$bithumb->getResponse(new SingleOrderRequest($orderId,$pair))->isError()){
-                                if($bithumb->response->getData()->status == 'cancel'){
+                            if(!$this->exchangeClient->getResponse(new SingleOrderRequest($orderId,$pair))->isError()){
+                                if($this->exchangeClient->response->getData()->status == 'cancel'){
                                     //just remove brick
                                     Brick::destroyBrickByOrderId($orderId);
                                     continue;
                                 }else{
-                                    $this->info( print_r($bithumb->response->getData(),1));
-                                    $this->info('Daemon Waller error ' . $bithumb->response->getCode() . $bithumb->response->getMessage());
+                                    $this->info( print_r($this->exchangeClient->response->getData(),1));
+                                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+                                    continue;
 
                                 }
                             }
-                            $greenBricks = Brick::getGreenBricks($pair);
-                            $redBricks = Brick::getRedBricks($pair);
 
                             $otherWallBrick = new Brick();
                             $oldBrick = Brick::where('orderId', $orderId)->get()[0];
-//                    $this->info('$oldBrick  ' . print_r($oldBrick->getOriginal(), 1));
 
                             $otherWallBrick->symbol = $pair;
                             $otherWallBrick->type = 'limit';
+
                             if ($oldBrick->side == 'sell') {
 
                                 $otherWallBrick->side = 'buy';
-                                $percent = (float)$oldBrick->price * $spread;
+                                $percent = (float)$oldBrick->price * $this->spread;
                                 $otherWallBrick->price = number_format((float)$oldBrick->price - $percent, $symbolConfig->accuracy[0], '.', '');
-                                $otherWallBrick->quantity = number_format($buyOrderAmount/$otherWallBrick->price, $symbolConfig->accuracy[1], '.', '');
+                                $otherWallBrick->quantity = number_format($this->buyOrderAmount/$otherWallBrick->price, $symbolConfig->accuracy[1], '.', '');
 
                             } else {
-                                //                    $brick->quantity = number_format($_quantity*$spread + $_quantity , $symbolConfig->accuracy[1],'.','');
+                                //                    $brick->quantity = number_format($_quantity*$this->spread + $_quantity , $symbolConfig->accuracy[1],'.','');
                                 $otherWallBrick->side = 'sell';
                                 $otherWallBrick->quantity = $oldBrick->quantity;
-                                $otherWallBrick->price = number_format(($oldBrick->price * $spread) + $oldBrick->price, $symbolConfig->accuracy[0], '.', '');
+                                $otherWallBrick->price = number_format(($oldBrick->price * $this->spread) + $oldBrick->price, $symbolConfig->accuracy[0], '.', '');
 
                             }
-                            if ($bithumb->getResponse(new PlaceOrderRequest(
+                            if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
                                 $otherWallBrick->symbol, $otherWallBrick->type, $otherWallBrick->side, $otherWallBrick->price, $otherWallBrick->quantity, (string)ServerTimeExample::getTimestamp()
                             ))->isError()) {
-                                $this->info('Daemon Waller error ' . $bithumb->response->getCode() . $bithumb->response->getMessage());
+                                $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
                                 $this->info($otherWallBrick->quantity . 'Params : ' . print_r($otherWallBrick->price, 1).$otherWallBrick->side);
 //                        $this->info('Daemon Waller error ' . print_r($otherWallBrick ,1));
 
 
                             } else {
-                                $otherWallBrick->orderId = $bithumb->response->getData()->orderId;
+                                $otherWallBrick->orderId = $this->exchangeClient->response->getData()->orderId;
                                 $otherWallBrick->save();
+                                Brick::destroyBrickByOrderId($orderId);
 
-
-                                if($greenBricks->isEmpty()){
+                                // if we sell 1 order try to restore wall
+                                if(Brick::getRedBricks($pair)->isEmpty()){
                                     $this->info('Daemon Waller HERE red ' . print_r($otherWallBrick->price,1));
-
                                     $this->createWall($pair,'sell',$otherWallBrick->price );
                                 }
-                                if($redBricks->isEmpty()){
+                                if(Brick::getGreenBricks($pair)->isEmpty()){
                                     $this->info('Daemon Waller HERE green' . print_r($otherWallBrick->price,1) );
-
                                     $this->createWall($pair,'buy',$otherWallBrick->price );
                                 }
 
-
                             }
 
-                            Brick::destroyBrickByOrderId($orderId);
                         }
-
-//                if(!empty($openWallerOrdersArray)){
-//                   if( $bithumb->getResponse(new CancelOrdersRequest($openWallerOrdersArray,$pair))->isError()){
-//                       $this->info('Daemon Waller CancelOrdersRequest error '.$bithumb->response->getCode().$bithumb->response->getMessage());
-//                   }
-//
-//
-//                }
-//            Modules\Waller::createWalls();
-                        //create bricks
-                        //create first sell wall
-
 
                     }
 //price trailing
@@ -228,14 +231,14 @@ class Waller extends Command
                                 $priceMin = (float)$redBrick->price;
                             }
                         }
-                        $price_new = $priceMin*$spread;
+                        $price_new = $priceMin*$this->spread;
                         $floatPrice = $priceMin-$price_new;
                         $this->info('Daemon$redBricks $floatPrice ' . $floatPrice);
                         $this->info('Daemon Waller error ' . $currentPrice);
 
                         if($floatPrice > (float)$currentPrice) {
                             //create wall from current price
-                            if (!$bithumb->getResponse(new CancelOrdersRequest($openWallerOrdersArray, $pair))->isError()) {
+                            if (!$this->exchangeClient->getResponse(new CancelOrdersRequest($openWallerOrdersArray, $pair))->isError()) {
                                 foreach ($openWallerOrdersArray as $orderId) {
                                     Brick::destroyBrickByOrderId($orderId);
                                 }
@@ -247,13 +250,15 @@ class Waller extends Command
                                 $otherWallBrick->quantity = $redBricks[0]->quantity;
                                 $otherWallBrick->price = $currentPrice;
 
-                                if ($bithumb->getResponse(new PlaceOrderRequest(
+                                if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
                                     $pair, $otherWallBrick->type, $otherWallBrick->side, $otherWallBrick->price, $otherWallBrick->quantity, (string)ServerTimeExample::getTimestamp()
                                 ))->isError()) {
-                                    $this->info('Daemon Waller error ' . $bithumb->response->getCode() . $bithumb->response->getMessage());
+                                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
                                     $this->info($otherWallBrick->quantity . 'Params : ' . print_r($otherWallBrick->price, 1) . $otherWallBrick->side);
                                 } else {
-                                    $otherWallBrick->orderId = $bithumb->response->getData()->orderId;
+                                    $otherWallBrick->orderId = $this->exchangeClient->response->getData()->orderId;
+//                                    $otherWallBrick->createTime = $this->exchangeClient->response->getTimestamp();
+
                                     $otherWallBrick->save();
                                 }
                             }
@@ -267,7 +272,7 @@ class Waller extends Command
                                 $priceMax = (float)$greenBrick->price;
                             }
                         }
-                        $price_new = $priceMax*$spread;
+                        $price_new = $priceMax*$this->spread;
                         $floatPrice = $priceMax + $price_new ;
                         $this->info('$greenBricks $floatPrice' . $floatPrice);
                         $this->info('$greenBricks $price_new' . $price_new);
@@ -276,7 +281,7 @@ class Waller extends Command
                         $this->info('$priceMax' . $priceMax);
                         if($floatPrice < (float)$currentPrice){
                             //create wall from current price
-                            if(!$bithumb->getResponse(new CancelOrdersRequest($openWallerOrdersArray,$pair))->isError()){
+                            if(!$this->exchangeClient->getResponse(new CancelOrdersRequest($openWallerOrdersArray,$pair))->isError()){
                                 foreach ($openWallerOrdersArray as $orderId){
                                     Brick::destroyBrickByOrderId($orderId);
                                 }
@@ -288,204 +293,82 @@ class Waller extends Command
                                 $otherWallBrick->quantity = $greenBricks[0]->quantity;
                                 $otherWallBrick->price = $currentPrice;
 
-                                if ($bithumb->getResponse(new PlaceOrderRequest(
+                                if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
                                     $pair, $otherWallBrick->type, $otherWallBrick->side, $otherWallBrick->price, $otherWallBrick->quantity, (string)ServerTimeExample::getTimestamp()
                                 ))->isError()) {
-                                    $this->info('Daemon Waller error ' . $bithumb->response->getCode() . $bithumb->response->getMessage());
+                                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
                                     $this->info($otherWallBrick->quantity . 'Params : ' . print_r($otherWallBrick->price, 1).$otherWallBrick->side);
                                 } else {
-                                    $otherWallBrick->orderId = $bithumb->response->getData()->orderId;
+                                    $otherWallBrick->orderId = $this->exchangeClient->response->getData()->orderId;
+//                                    $otherWallBrick->createTime = $this->exchangeClient->response->getTimestamp();
+
                                     $otherWallBrick->save();
                                 }
                             }
                         }
                     }
                 }
-            //check orders from rest api
-
-            // get limit orders Waller getBricks and try to get from rest api
-
-
-//        $bithumb->subscribe(new OrderStream(
-//            'BIP-USDT',
-//            function (WSClientInterface $client,OrderStream $stream ,WSResponse $response) use ($bithumb ,$spread, $eligibleModules,$symbolConfig) {
-//                if ($response->isError()) {
-//                    error_log(print_r($response,1));
-//                    $client->subscribe($stream); // reconnect
-//                }
-//                if ($response->isNormal()) {
-////                    error_log(print_r($response->getData(), 1));
-//                    try {
-//                        //convert ticker data to store
-//                        if ($response === 'close') {
-//                            $this->info('Daemon ticker restart');
-//                            return Artisan::call("daemon:waller", []);
-//                        }
-//                        //if limit check order in base and delete to create new
-//                        if($response->getData()->type == 'limit'&&$response->getData()->status == 'fullDealt'){
-//                            $newBrick = new Brick();
-//
-//                            if(Brick::destroyBrickByOrderId($response->getData()->oId)){
-//                             if($response->getData()->side == 'buy'){
-//                                 $newBrick->side = 'sell';
-//                                 $newBrick->type ='limit' ;
-//                                 $newBrick->symbol =$response->getData()->symbol ;
-//                                 //get price first brick if price empty
-//                                 $newBrick->price =number_format(($response->getData()->price*$spread) + $response->getData()->price, $symbolConfig->accuracy[0],'.','');
-//                                 $_quantity = $response->getData()->quantity/$newBrick->price;
-//                                 $newBrick->quantity = number_format($_quantity*$spread + $_quantity , $symbolConfig->accuracy[1],'.','') ;
-//                             }elseif($response->getData()->side == 'sell'){
-//                                 $newBrick->side = 'buy';
-//                                 $newBrick->type ='limit' ;
-//                                 $newBrick->symbol =$response->getData()->symbol ;
-//                                 //get price first brick if price empty
-//                                 $newBrick->price = number_format($response->getData()->price - ($response->getData()->price*$spread), $symbolConfig->accuracy[0],'.','') ;
-//                                 $_quantity = $response->getData()->quantity;
-//                                 $newBrick->quantity = number_format($_quantity*$spread - $_quantity, $symbolConfig->accuracy[1],'.','') ;
-//                             }
-//                         }
-//                            //create antogonist order
-//                            if($bithumb->getResponse(new PlaceOrderRequest(
-//                                $newBrick->symbol,$newBrick->type,$newBrick->side,$newBrick->price,$newBrick->quantity,$response->getData()->time
-//                            ))->isError()){
-//                                $this->info('Daemon Waller error in subscribe '.$bithumb->response->getCode().$bithumb->response->getMessage());
-//                            }else{
-//                                $newBrick->orderId = $bithumb->response->getData()->orderId;
-//                                $newBrick->save();
-//                            }
-//                        }
-////                        oId	order id		String
-////price	order price	if type is "market", the value is "-1"	String
-////quantity	order quantity		String
-////side		buy or sell	String
-////symbol			String
-////type		limit or market	String
-////status		created，partDealt，fullDealt，canceled	String
-////dealPrice	Last executed price	if status = canceled, the value is "0"	String
-////dealQuantity	Last executed quantity	if status = canceled, the value is "0"	String
-////dealVolume	Last executed volume	if status = canceled, the value is "0"	String
-////fee		if status = canceled, the value is "0"	String
-////feeType		if status = canceled, the value is ""	String
-////cancelQuantity		if status is not "canceled", the value is "0"	String
-////time	order update time		Long
-//
-//
-//                foreach ($openWallerOrdersArray as $orderId) {
-//                    Brick::destroyBrickByOrderId($orderId);
-//                }
+                Cache::set('lastWallUpdate', time());
+                sleep(1);
                     } catch (\Exception $exception) {
                         $this->alert($exception->getMessage());
-                        return Artisan::call("daemon:waller", []);
-
+                        continue;
+//                        return Artisan::call("daemon:waller", []);
             }
 //
-                    Cache::forever('lastWallUpdate', time());
-//                }
-//            }));
 
-//        } else {
-//            $this->info('WS : Mini Ticker');
-//            $bithumb->miniTicker(function ($api, $ticker) use ($saveTicker,$eligibleModules) {
-//                try {
-//                    if ($saveTicker)
-//                        \App\Ticker::create($ticker);
-//                    foreach ($ticker as $tick) {
-//                        Cache::put($tick['symbol'], $tick, now()->addHour(1));
-//                        $this->onTickEvent($tick,$eligibleModules);
-//                    }
-//                } catch (\Exception $exception) {
-//                    $this->alert($exception->getMessage());
-//                }
-//
-//                Cache::forever('lastTick', time());
-//            });
-//        }
-
-            unset($bithumb);
-//            $this->info('Stop cycle return 0');
-//            $this->info('Daemon Waller restart');
-            sleep(1);
         }
-//        return 0;
-        //restart
     }
 
-    public function createWall($symbol,$side,$price =0){
-        $bithumb = BithumbTradeHelper::getBithumb();
 
-        $waller = Modules::init('Waller');
-//            $this->info(print_r($waller->config, 1));
-//                $waller->setConfig('buyCovering',1);
-//                $sellCovering = $waller->getConfig('sellCovering');
-//                $spread = $waller->getConfig('spread');
-//                $buyOrderAmount = $waller->getConfig('buyOrderAmount');
-//                $pair = $waller->setConfig(['pair'=>'BIP-USDT']);
-
-        $buyCovering = $waller->getConfig('buyCovering');
-        $sellCovering = $waller->getConfig('sellCovering');
-        $spread = (float)$waller->getConfig('spread');
-
-        $buyOrderAmount = $waller->getConfig('buyOrderAmount');
-        $pair = $symbol;
+    /**
+     * Create wall on pair with defined side from current price if $pricebrick=0 or from  defined price
+     * @param string $pair
+     * @param string $side
+     * @param float $pricebrick
+     */
+    public function createWall($pair, $side, $pricebrick=0){
 
         $symbolConfig = BithumbTradeHelper::getNotions($pair);
-        $openBithumbOrdersArray = BithumbTradeHelper::getOpenOrdersId($bithumb,$pair);
-        $openWallerOrdersArray = Brick::getAllBricksOrderId($pair);        //create wall if not exis
         $currentPrice = (float)BithumbTradeHelper::getPrice($pair);
-
-//            $this->info('openWallerOrders' . print_r($openWallerOrdersArray, 1));
-        //close orders
-        $closedOrders = array_diff($openWallerOrdersArray, $openBithumbOrdersArray);
-//            $this->info('$closedOrders  ' . print_r($closedOrders, 1));
 //create wall from scratch
-        $countSellWall = $sellCovering / $spread;
-        $countBuyWall = $buyCovering / $spread;
-        $spread = $spread / 100;
+        $countSellWall = $this->sellCovering / $this->spread;
+        $countBuyWall = $this->buyCovering / $this->spread;
+        $this->spread = $this->spread / 100;
         $timestamp = (string)ServerTimeExample::getTimestamp();
-        if($pair == 'BIP-BTC'){
-            $buyOrderAmount =  0.000421600;
-            $spread = 0.3;
-            $buyCovering = 1;
-            $sellCovering = 1;
-            $countSellWall = $sellCovering / $spread;
-            $countBuyWall = $buyCovering / $spread;
-            $spread = $spread/100;
-
-        }
-        $pricebrick = $price;
 
         if($side == 'sell'){
             for ($i = 1; $i <= $countSellWall; $i++) {
                 $brick = new Brick();
-
-                //    protected $fillable = ['side', 'symbol', 'price', 'quantity', 'orderId', 'createTime','tradedNum'];
                 $brick->side = 'sell';
                 $brick->type = 'limit';
                 $brick->symbol = $pair;
                 //get price first brick if price empty
                 if ($pricebrick == 0) {
-                    $pricebrick = $currentPrice+($currentPrice * $spread);
+                    $pricebrick = $currentPrice+($currentPrice * $this->spread);
                 } else {
-                    $pricebrick = ($pricebrick * $spread) + $pricebrick;
+                    $pricebrick = ($pricebrick * $this->spread) + $pricebrick;
                 }
                 $brick->price = number_format($pricebrick, $symbolConfig->accuracy[0], '.', '');
-                $_quantity = $buyOrderAmount / $pricebrick;
-                $brick->quantity = number_format($_quantity * $spread + $_quantity, $symbolConfig->accuracy[1], '.', '');
-                // new order and subscribe to
+                $_quantity = $this->buyOrderAmount / $pricebrick;
+                $brick->quantity = number_format($_quantity * $this->spread + $_quantity, $symbolConfig->accuracy[1], '.', '');
+                // new order and todo subscribe to
 
-                if ($bithumb->getResponse(new PlaceOrderRequest(
+                if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
                     $brick->symbol, $brick->type, $brick->side, $brick->price, $brick->quantity, $timestamp
                 ))->isError()) {
 
-//                    $this->info('Daemon Waller error ' . print_r($bithumb->request,1));
-                    $this->info('Daemon Waller error ' . $bithumb->response->getCode() . $bithumb->response->getMessage());
-//                        $this->info('Daemon Waller error ' . print_r($bithumb-> ,1));
+//                    $this->info('Daemon Waller error ' . print_r($this->exchangeClient->request,1));
+                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+//                        $this->info('Daemon Waller error ' . print_r($this->exchangeClient-> ,1));
 //                        $this->info('Daemon Waller error ' . print_r($brick ,1));
 
                     $this->info(number_format($brick->quantity, $symbolConfig->accuracy[1], '.', '') . 'Params : ' . print_r(number_format($brick->price, $symbolConfig->accuracy[0], '.', ''), 1).$brick->side);
 
                 } else {
-                    $brick->orderId = $bithumb->response->getData()->orderId;
+                    $brick->orderId = $this->exchangeClient->response->getData()->orderId;
+//                    $brick->createTime = $this->exchangeClient->response->getTimestamp();
+
                     $brick->save();
                 }
             }
@@ -499,28 +382,30 @@ class Waller extends Command
                 $brick->type = 'limit';
                 //get price first brick if price empty
                 if ($pricebrick == 0) {
-                    $pricebrick = $currentPrice - ($currentPrice * $spread);
+                    $pricebrick = $currentPrice - ($currentPrice * $this->spread);
                 } else {
-                    $pricebrick = $pricebrick - ($pricebrick * $spread);
+                    $pricebrick = $pricebrick - ($pricebrick * $this->spread);
                 }
                 $brick->price = number_format($pricebrick, $symbolConfig->accuracy[0], '.', '');
-                $_quantity = $buyOrderAmount/$brick->price;
+                $_quantity = $this->buyOrderAmount/$brick->price;
                 $brick->quantity = number_format($_quantity, $symbolConfig->accuracy[1], '.', '');
                 // new order and subscribe to
-                if ($bithumb->getResponse(new PlaceOrderRequest(
+                if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
                     $brick->symbol, $brick->type, $brick->side, $brick->price, $brick->quantity, $timestamp
                 ))->isError()) {
-                    if($bithumb->response->getCode()==20003){
+                    if($this->exchangeClient->response->getCode()==20003){
 //                            $brick->save();
                     }
-                    $this->info('Daemon Waller error ' . $bithumb->response->getCode() . $bithumb->response->getMessage());
+                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
 //                        $this->info('Daemon Waller error ' . print_r($brick ,1));
 
-                    $this->info('Daemon $brick->price ' . $brick->price . ' $brick->quantity' . $brick->quantity .$brick->side);
+//                    $this->info('Daemon $brick->price ' . $brick->price . ' $brick->quantity' . $brick->quantity .$brick->side);
 //                        $this->info('Daemon $symbolConfig->accuracy ' . print_r($symbolConfig->accuracy, 1) . ' $brick->quantity' . $brick->quantity);
 
                 } else {
-                    $brick->orderId = $bithumb->response->getData()->orderId;
+                    $brick->orderId = $this->exchangeClient->response->getData()->orderId;
+//                    $brick->createTime = $this->exchangeClient->response->getTimestamp();
+
                     $brick->save();
                 }
             }

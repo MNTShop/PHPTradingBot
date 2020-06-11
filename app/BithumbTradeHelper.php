@@ -131,6 +131,24 @@ class BithumbTradeHelper
             return $orderIds;
         }
     }
+    public static function getOpenOrdersCreationTime(BithumbClient $client,$symbol='BIP-USDT'){
+        $page='';
+        $count='100';
+        if($client->getResponse(new OpenOrdersRequest($symbol,$page,$count))->isError()){
+
+            error_log('open Orders errors  : '.PHP_EOL.print_r($symbol));
+            error_log('open Orders errors  : '.PHP_EOL.print_r($page,1));
+            error_log('open Orders errors  : '.PHP_EOL.print_r($count,1));
+            error_log('open Orders errors  : '.PHP_EOL.print_r($client->response->getCode(),1).$client->response->getMessage());
+            return false;
+        }else{
+            $orderIds = [];
+            foreach ($client->response->getData()->list as $order){
+                $orderIds [] = $order->createTime;
+            }
+            return $orderIds;
+        }
+    }
 
     /**
      * Return Api Response or false if no param

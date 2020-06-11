@@ -51,6 +51,15 @@ class Brick extends Model
         return $orderIds;
 
     }
+    public static function getAllBricksTimeCreation($symbol){
+        $Bricks =  self::where('symbol',$symbol)->get();
+        $orderIds = [];
+        foreach ($Bricks as $brick){
+            $orderIds[] =   $brick->createTime ;
+        }
+        return $orderIds;
+
+    }
 
     public static function getRedBricks($symbol){
         return self::where('side', 'sell')
