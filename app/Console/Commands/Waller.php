@@ -75,7 +75,6 @@ class Waller extends Command
      */
     protected $sellCovering ;
 
-
     /**
      * Create a new command instance.
      *
@@ -96,10 +95,9 @@ class Waller extends Command
     public function handle()
     {
                     $this->info('Daemon start');
-        $this->exchangeClient = BithumbTradeHelper::getBithumb();
         while(true) {
             try{
-            $enabledModules = Modules::getActiveModules();
+                $enabledModules = Modules::getActiveModules();
             $eligibleModules = [];
             if ($enabledModules) {
                 foreach ($enabledModules as $module) {
@@ -110,9 +108,11 @@ class Waller extends Command
                 }
             }
             //init waller and new settings
-            $this->waller = Modules::init('Waller');
-            $pairs = [$this->waller->getConfig('pair')];
-//            $pairs = ['BIP-USDT','BIP-BTC'];
+                $this->exchangeClient = BithumbTradeHelper::getBithumb();
+
+                $this->waller = Modules::init('Waller');
+//            $pairs = [$this->waller->getConfig('pair')];
+            $pairs = ['BIP-USDT','BIP-BTC'];
                 foreach ($pairs as $pair ){
                     // set pair settings
                     if($pair == 'BIP-BTC'){
@@ -234,7 +234,7 @@ class Waller extends Command
                         $price_new = $priceMin*$this->spread;
                         $floatPrice = $priceMin-$price_new;
                         $this->info('Daemon$redBricks $floatPrice ' . $floatPrice);
-                        $this->info('Daemon Waller error ' . $currentPrice);
+                        $this->info('Daemon Waller  current pair price ' . $currentPrice);
 
                         if($floatPrice > (float)$currentPrice) {
                             //create wall from current price
@@ -332,9 +332,9 @@ class Waller extends Command
         $symbolConfig = BithumbTradeHelper::getNotions($pair);
         $currentPrice = (float)BithumbTradeHelper::getPrice($pair);
 //create wall from scratch
-        $countSellWall = $this->sellCovering / $this->spread;
-        $countBuyWall = $this->buyCovering / $this->spread;
-        $this->spread = $this->spread / 100;
+        $countSellWall = $this->sellCovering /($this->spread*100);
+        $countBuyWall = $this->buyCovering / ($this->spread*100);
+//        $this->spread = $this->spread / 100;
         $timestamp = (string)ServerTimeExample::getTimestamp();
 
         if($side == 'sell'){
