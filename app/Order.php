@@ -92,7 +92,7 @@ class Order extends Model
             // Bithumb trade helper make buy
 
             $response = BithumbTradeHelper::placeOrder(strtolower($type),$order->symbol,strtolower($order->side),'-1',$order->origQty);
-            error_log('Placed order: '.print_r($response,1));
+//            error_log('Placed order: '.print_r($response,1));
             if($response == false){
                 $anyFails =true;
             }else{
@@ -150,6 +150,78 @@ class Order extends Model
         }
 
         $order->save();
+
+        /*
+         * Modules after hook
+         */
+        if ($activeModules) {
+            foreach ($activeModules as $module) {
+                $module->getFactory()->afterBuy();
+            }
+        }
+
+        return $order->id;
+    }
+    public static function addBrick(Brick $brick,$spread){
+        /*
+         * Module Hook
+         */
+        $activeModules = Modules::getActiveModules();
+        $anyFails = false;
+        if ($activeModules) {
+            foreach ($activeModules as $module) {
+                if ($module->getFactory()->beforeBuy() == false) {
+                    $anyFails = true;
+                }
+            }
+        }
+        //From bithumb trader can BBuy?
+
+        //
+        $order = new Order();
+        $order->comment = 'Waller';
+        $order->symbol = $brick->symbol;
+        $order->side =  $brick->side;
+        $order->origQty = $brick->quantity;
+        $order->type = $brick->type;
+        $order->timeInForce = 'GTC';
+
+        $order->takeProfit = $spread;
+
+                $order->orderId = rand(1, 9999999);
+                $order->clientOrderId = $brick->orderId;
+
+                $order->transactTime = time();
+                $order->price = $brick->price;
+                $order->executedQty = $brick->quantity;
+                $order->cummulativeQuoteQty = $brick->quantity;
+                $order->status = 'FILLED';
+
+
+        if ($anyFails) {
+            return false;
+        }
+
+        if($brick->side == 'sell'){
+            //found buy brick  last buy brick without
+//            $order->buyId = $order->id;
+//            self::
+            $orders = Order::where('side', 'BUY')
+                ->where('comment','=', 'Waller')
+                ->where('symbol','=', $brick->symbol)
+                ->whereDoesntHave('sellOrder')
+                ->orderBy('created_at', 'desc')
+                ->get();
+            if(!$orders->isEmpty()){
+                $order->buyId = $orders[0]->id;
+//                $orders[0]->->buyId = $buyId;
+            }
+        }
+
+        error_log(print_r($order,1));
+        $order->save();
+//        $order->save();
+
 
         /*
          * Modules after hook
@@ -387,6 +459,7 @@ class Order extends Model
 
         $orders = Order::where('created_at', '>', $since)
             ->where('side', 'BUY')
+            ->where('comment','<>', 'Waller')
             ->whereDoesntHave('sellOrder')
             ->orderBy('created_at', 'desc')
             ->get();
