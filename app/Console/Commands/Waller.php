@@ -169,10 +169,14 @@ class Waller extends Command
                                     continue;
                                 }else{
                                     $this->info( print_r($this->exchangeClient->response->getData(),1));
-                                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+                                    $this->info('Daemon Waller new order execute ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
 //                                    continue;
 
                                 }
+                            }else{
+                                $this->info('Daemon Waller error request ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+
+                                continue;
                             }
 
                             $otherWallBrick = new Brick();
