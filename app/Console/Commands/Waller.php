@@ -117,9 +117,9 @@ class Waller extends Command
                     // set pair settings
                     if($pair == 'BIP-BTC'){
                         $this->buyOrderAmount =  0.000421600;
-                        $this->spread = 0.5;
-                        $this->buyCovering = 2;
-                        $this->sellCovering = 2;
+                        $this->spread = 2;
+                        $this->buyCovering = 20;
+                        $this->sellCovering = 20;
                         $this->spread = $this->spread/100;
                     }else{
                         $this->buyCovering = $this->waller->getConfig('buyCovering');
@@ -132,6 +132,11 @@ class Waller extends Command
                     // from bithumb
                     $symbolConfig = BithumbTradeHelper::getNotions($pair);
                     $openBithumbOrdersArray = BithumbTradeHelper::getOpenOrdersId($this->exchangeClient,$pair);
+                    if(empty($openBithumbOrdersArray)){
+                        //destroy all bricks in waller
+                        Brick::destroyWall($pair);
+
+                    }
                     $openWallerOrdersArray = Brick::getAllBricksOrderId($pair);
                     //create wall if not exist in waller memmory
                     if (empty($openWallerOrdersArray)) {
@@ -165,7 +170,7 @@ class Waller extends Command
                                 }else{
                                     $this->info( print_r($this->exchangeClient->response->getData(),1));
                                     $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
-                                    continue;
+//                                    continue;
 
                                 }
                             }
@@ -309,7 +314,7 @@ class Waller extends Command
                     }
                 }
                 Cache::set('lastWallUpdate', time());
-                sleep(1);
+                sleep(5);
                     } catch (\Exception $exception) {
                         $this->alert($exception->getMessage());
                         continue;
@@ -344,8 +349,9 @@ class Waller extends Command
                 $brick->type = 'limit';
                 $brick->symbol = $pair;
                 //get price first brick if price empty
+                $val = $currentPrice * $this->spread;
                 if ($pricebrick == 0) {
-                    $pricebrick = $currentPrice+($currentPrice * $this->spread);
+                    $pricebrick = $currentPrice+$val;
                 } else {
                     $pricebrick = ($pricebrick * $this->spread) + $pricebrick;
                 }

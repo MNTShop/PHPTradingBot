@@ -34,6 +34,9 @@ class Brick extends Model
     public static function destroyBrickByOrderId($orderId){
         $order = self::where('orderId', $orderId)->delete();
     }
+    public static function destroyWall($pair){
+        $order = self::where('symbol', $pair)->delete();
+    }
 
     public static function getFirstGreen($symbol){
         $order = self::where('symbol', $symbol)
