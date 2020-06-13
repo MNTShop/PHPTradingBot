@@ -100,7 +100,7 @@ class Waller extends Command
                 return 0;
             }
         }else{
-            $this->info('Daemon Waller error request ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+            $this->info('Daemon Waller error checkBrick request ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
         }
         return 0;
     }
@@ -119,7 +119,7 @@ class Waller extends Command
         if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
             $opositeBrick->symbol, $opositeBrick->type, $opositeBrick->side, $opositeBrick->price, $opositeBrick->quantity, (string)ServerTimeExample::getTimestamp()
         ))->isError()) {
-            $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+            $this->info('Daemon Waller error placeOppositeBrick' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
             $this->info($opositeBrick->quantity . 'Params : ' . print_r($opositeBrick->price, 1).$opositeBrick->side);
 //                        $this->info('Daemon Waller error ' . print_r($otherWallBrick ,1));
             return 0;
@@ -159,7 +159,7 @@ class Waller extends Command
                 if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
                     $firstBrick->symbol, $trailingBrick->type, $trailingBrick->side, $trailingBrick->price, $trailingBrick->quantity, (string)ServerTimeExample::getTimestamp()
                 ))->isError()) {
-                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+                    $this->info('Daemon Waller error priceTrailingBrick ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
                     $this->info($trailingBrick->quantity . 'Params : ' . print_r($trailingBrick->price, 1).$trailingBrick->side);
                 } else {
                     $trailingBrick->orderId = $this->exchangeClient->response->getData()->orderId;
@@ -345,7 +345,7 @@ class Waller extends Command
                 ))->isError()) {
 
 //                    $this->info('Daemon Waller error ' . print_r($this->exchangeClient->request,1));
-                    $this->info('Daemon Waller error ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+                    $this->info('Daemon Waller error createWall ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
 //                        $this->info('Daemon Waller error ' . print_r($this->exchangeClient-> ,1));
 //                        $this->info('Daemon Waller error ' . print_r($brick ,1));
 
