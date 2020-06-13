@@ -86,91 +86,6 @@ class Waller extends Command
 
     }
 
-    public function checkBrick($brick){
-        if(!$this->exchangeClient->getResponse(new SingleOrderRequest($brick->orderId,$brick->symbol))->isError()){
-            if($this->exchangeClient->response->getData()->status == 'success'){
-                //need to place new brick
-                Brick::destroyBrickByOrderId($brick->orderId);
-                return 1;
-
-            }
-            elseif($this->exchangeClient->response->getData()->status == 'cancel'){
-                //just remove brick
-                Brick::destroyBrickByOrderId($brick->orderId);
-                return 0;
-            }
-        }else{
-            $this->info('Daemon Waller error checkBrick request ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
-        }
-        return 0;
-    }
-    public function placeOppositeBrick($destroyedBrick){
-        //need place new opposite brick
-        $symbolConfig = BithumbTradeHelper::getNotions($destroyedBrick->symbol);
-        $opositeBrick = new Brick();
-        $opositeBrick->symbol = $destroyedBrick->symbol;
-        $opositeBrick->type = 'limit';
-        $opositeBrick->side = ($destroyedBrick->side == 'sell')?'buy':'sell';
-
-        $percent = ($opositeBrick->side == 'sell')?(float)$destroyedBrick->price * $this->spread:(float)$destroyedBrick->price * $this->spread * -1;
-        $opositeBrick->price = number_format((float)$destroyedBrick->price + $percent, $symbolConfig->accuracy[0], '.', '');
-        $opositeBrick->quantity = ($opositeBrick->side == 'sell') ? $destroyedBrick->quantity : number_format($this->buyOrderAmount/$opositeBrick->price, $symbolConfig->accuracy[1], '.', '');
-
-        if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
-            $opositeBrick->symbol, $opositeBrick->type, $opositeBrick->side, $opositeBrick->price, $opositeBrick->quantity, (string)ServerTimeExample::getTimestamp()
-        ))->isError()) {
-            $this->info('Daemon Waller error placeOppositeBrick' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
-            $this->info($opositeBrick->quantity . 'Params : ' . print_r($opositeBrick->price, 1).$opositeBrick->side);
-//                        $this->info('Daemon Waller error ' . print_r($otherWallBrick ,1));
-            return 0;
-        } else {
-            return $opositeBrick;
-        }
-    }
-    public function priceTrailingBrick($firstBrick,$currentPrice){
-        //need place new opposite brick
-        $openWallerOrdersArray = Brick::getAllBricksOrderId($firstBrick->symbol);
-
-        //get current price
-        $price = (float)$firstBrick->price;
-        $add_interest =($firstBrick->side == 'sell')? $price*$this->spread*-1 : $price*$this->spread;
-        $floatPrice = $price + $add_interest ;
-
-        $this->info('$greenBricks $floatPrice' . $floatPrice);
-        $this->info('$greenBricks $add_interest' . $add_interest);
-        $this->info('current price  ' . $currentPrice);
-        $this->info('$priceMax ' . $currentPrice);
-        $this->info('$priceMax' . $price);
-
-        if($floatPrice < (float)$currentPrice){
-            //create wall from current price
-            if(!$this->exchangeClient->getResponse(new CancelOrdersRequest($openWallerOrdersArray,$firstBrick->symbol))->isError()){
-                foreach ($openWallerOrdersArray as $orderId){
-                    Brick::destroyBrickByOrderId($orderId);
-                }
-                //add 1 brick to collection
-                $trailingBrick = new Brick();
-                $trailingBrick->symbol = $firstBrick->symbol;
-                $trailingBrick->type = 'limit';
-                $trailingBrick->side = $firstBrick->side;
-                $trailingBrick->quantity = $firstBrick->quantity;
-                $trailingBrick->price = $currentPrice;
-
-                if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
-                    $firstBrick->symbol, $trailingBrick->type, $trailingBrick->side, $trailingBrick->price, $trailingBrick->quantity, (string)ServerTimeExample::getTimestamp()
-                ))->isError()) {
-                    $this->info('Daemon Waller error priceTrailingBrick ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
-                    $this->info($trailingBrick->quantity . 'Params : ' . print_r($trailingBrick->price, 1).$trailingBrick->side);
-                } else {
-                    $trailingBrick->orderId = $this->exchangeClient->response->getData()->orderId;
-//                                    $trailingBrick->createTime = $this->exchangeClient->response->getTimestamp();
-                    $trailingBrick->type = 'trailing'; // mark as trailing
-
-                    $trailingBrick->save();
-                }
-            }
-        }
-    }
     /**
      * Execute the console command.
      *
@@ -179,32 +94,32 @@ class Waller extends Command
      */
     public function handle()
     {
-                    $this->info('Daemon start');
+        $this->info('Daemon start');
         while(true) {
             try{
                 $enabledModules = Modules::getActiveModules();
-            $eligibleModules = [];
-            if ($enabledModules) {
-                foreach ($enabledModules as $module) {
-                    $_module = $module->getFactory();
-                    if (method_exists($_module, 'signalLoop')) {
-                        $eligibleModules[] = $_module;
+                $eligibleModules = [];
+                if ($enabledModules) {
+                    foreach ($enabledModules as $module) {
+                        $_module = $module->getFactory();
+                        if (method_exists($_module, 'signalLoop')) {
+                            $eligibleModules[] = $_module;
+                        }
                     }
                 }
-            }
-            //init waller and new settings
+                //init waller and new settings
                 $this->exchangeClient = BithumbTradeHelper::getBithumb();
 
                 $this->waller = Modules::init('Waller');
-            $pairs = [$this->waller->getConfig('pair')];
-//            $pairs = ['BIP-USDT','BIP-BTC'];
+                $pairs = [$this->waller->getConfig('pair')];
+//            $pairs = ['BIP-USDT','BIP-BTC']; // uncomment to trade on desire pairs
                 foreach ($pairs as $pair ){
                     // set pair settings
                     if($pair == 'BIP-BTC'){
                         $this->buyOrderAmount =  0.000421600;
                         $this->spread = 2;
-                        $this->buyCovering = 6;
-                        $this->sellCovering = 6;
+                        $this->buyCovering = 20;
+                        $this->sellCovering = 20;
                         $this->spread = $this->spread/100;
                     }else{
                         $this->buyCovering = $this->waller->getConfig('buyCovering');
@@ -293,14 +208,100 @@ class Waller extends Command
 
                 }
                 Cache::set('lastWallUpdate', time());
-                sleep(5);
-                    } catch (\Exception $exception) {
-                        $this->alert($exception->getMessage());
-                        continue;
+                sleep(1);
+            } catch (\Exception $exception) {
+                $this->alert($exception->getMessage());
+                continue;
 //                        return Artisan::call("daemon:waller", []);
             }
 //
 
+        }
+    }
+
+    public function checkBrick($brick){
+        if(!$this->exchangeClient->getResponse(new SingleOrderRequest($brick->orderId,$brick->symbol))->isError()){
+            if($this->exchangeClient->response->getData()->status == 'success'){
+                //need to place new brick
+                Brick::destroyBrickByOrderId($brick->orderId);
+                return 1;
+
+            }
+            elseif($this->exchangeClient->response->getData()->status == 'cancel'){
+                //just remove brick
+                Brick::destroyBrickByOrderId($brick->orderId);
+                return 0;
+            }
+        }else{
+            $this->info('Daemon Waller error checkBrick request ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+        }
+        return 0;
+    }
+    public function placeOppositeBrick($destroyedBrick){
+        //need place new opposite brick
+        $symbolConfig = BithumbTradeHelper::getNotions($destroyedBrick->symbol);
+        $opositeBrick = new Brick();
+        $opositeBrick->symbol = $destroyedBrick->symbol;
+        $opositeBrick->type = 'limit';
+        $opositeBrick->side = ($destroyedBrick->side == 'sell')?'buy':'sell';
+
+        $percent = ($opositeBrick->side == 'sell')?(float)$destroyedBrick->price * $this->spread:(float)$destroyedBrick->price * $this->spread * -1;
+        $opositeBrick->price = number_format((float)$destroyedBrick->price + $percent, $symbolConfig->accuracy[0], '.', '');
+        $opositeBrick->quantity = ($opositeBrick->side == 'sell') ? $destroyedBrick->quantity : number_format($this->buyOrderAmount/$opositeBrick->price, $symbolConfig->accuracy[1], '.', '');
+
+        if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
+            $opositeBrick->symbol, $opositeBrick->type, $opositeBrick->side, $opositeBrick->price, $opositeBrick->quantity, (string)ServerTimeExample::getTimestamp()
+        ))->isError()) {
+            $this->info('Daemon Waller error placeOppositeBrick' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+            $this->info($opositeBrick->quantity . 'Params : ' . print_r($opositeBrick->price, 1).$opositeBrick->side);
+//                        $this->info('Daemon Waller error ' . print_r($otherWallBrick ,1));
+            return 0;
+        } else {
+            return $opositeBrick;
+        }
+    }
+    public function priceTrailingBrick($firstBrick,$currentPrice){
+        //need place new opposite brick
+        $openWallerOrdersArray = Brick::getAllBricksOrderId($firstBrick->symbol);
+
+        //get current price
+        $price = (float)$firstBrick->price;
+        $add_interest =($firstBrick->side == 'sell')? $price*$this->spread*-1 : $price*$this->spread;
+        $floatPrice = $price + $add_interest ;
+
+        $this->info('$greenBricks $floatPrice' . $floatPrice);
+        $this->info('$greenBricks $add_interest' . $add_interest);
+        $this->info('current price  ' . $currentPrice);
+        $this->info('$priceMax ' . $currentPrice);
+        $this->info('$priceMax' . $price);
+
+        if($floatPrice < (float)$currentPrice){
+            //create wall from current price
+            if(!$this->exchangeClient->getResponse(new CancelOrdersRequest($openWallerOrdersArray,$firstBrick->symbol))->isError()){
+                foreach ($openWallerOrdersArray as $orderId){
+                    Brick::destroyBrickByOrderId($orderId);
+                }
+                //add 1 brick to collection
+                $trailingBrick = new Brick();
+                $trailingBrick->symbol = $firstBrick->symbol;
+                $trailingBrick->type = 'limit';
+                $trailingBrick->side = $firstBrick->side;
+                $trailingBrick->quantity = $firstBrick->quantity;
+                $trailingBrick->price = $currentPrice;
+
+                if ($this->exchangeClient->getResponse(new PlaceOrderRequest(
+                    $firstBrick->symbol, $trailingBrick->type, $trailingBrick->side, $trailingBrick->price, $trailingBrick->quantity, (string)ServerTimeExample::getTimestamp()
+                ))->isError()) {
+                    $this->info('Daemon Waller error priceTrailingBrick ' . $this->exchangeClient->response->getCode() . $this->exchangeClient->response->getMessage());
+                    $this->info($trailingBrick->quantity . 'Params : ' . print_r($trailingBrick->price, 1).$trailingBrick->side);
+                } else {
+                    $trailingBrick->orderId = $this->exchangeClient->response->getData()->orderId;
+//                                    $trailingBrick->createTime = $this->exchangeClient->response->getTimestamp();
+                    $trailingBrick->type = 'trailing'; // mark as trailing
+
+                    $trailingBrick->save();
+                }
+            }
         }
     }
 
