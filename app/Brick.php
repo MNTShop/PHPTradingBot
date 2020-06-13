@@ -67,8 +67,7 @@ class Brick extends Model
     public static function getRedBricks($symbol){
         return self::where('side', 'sell')
             ->where('symbol', $symbol)
-            ->orderBy('side', 'desc')
-            ->orderBy('price', 'desc')
+            ->orderBy('price', 'asc')
             ->get();
     }
     public static function getGreenBricks($symbol){
