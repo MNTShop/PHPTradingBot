@@ -185,7 +185,7 @@ class Waller extends Command
                                     if($oppositeBrick!==0){
                                         $oppositeBrick->save();
                                     }
-                                    if($green_brick->type == 'trailing'){
+                                    if($red_brick->type == 'trailing'){
                                         //try to reconstruct red wall
                                         $this->createWall($pair,'sell',$currentPrice);
                                     }
