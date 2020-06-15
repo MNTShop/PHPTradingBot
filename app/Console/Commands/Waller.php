@@ -257,6 +257,7 @@ class Waller extends Command
 //                        $this->info('Daemon Waller error ' . print_r($otherWallBrick ,1));
             return 0;
         } else {
+            $opositeBrick->orderId = $this->exchangeClient->response->getData()->orderId;
             return $opositeBrick;
         }
     }
